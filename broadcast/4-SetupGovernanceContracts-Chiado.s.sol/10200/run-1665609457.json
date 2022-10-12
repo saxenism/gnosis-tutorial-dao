@@ -1,0 +1,72 @@
+{
+  "transactions": [
+    {
+      "hash": "0x32db24ef642fd1b7c72b270b3fadc49d69818e096e8c02fd7fb7a97976d5d41a",
+      "transactionType": "CALL",
+      "contractName": null,
+      "contractAddress": "0x834bdCbaAe8b03FaBB1EEe03297fC1e5ee3D1bA8",
+      "function": null,
+      "arguments": null,
+      "transaction": {
+        "type": "0x02",
+        "from": "0x59b16d84ec7c88343cd8473b6d57fd66d2596707",
+        "to": "0x834bdcbaae8b03fabb1eee03297fc1e5ee3d1ba8",
+        "gas": "0x115ea",
+        "value": "0x0",
+        "data": "0x2f2ff15db09aa5aeb3702cfd50b6b62bc4532604938f21248a27a1d5ca736082b6819cc10000000000000000000000008bfa2afac4eb87e8f84ae8b21171eceb779d387e",
+        "nonce": "0x6",
+        "accessList": []
+      },
+      "additionalContracts": []
+    },
+    {
+      "hash": "0xd87a43f3e8655fc795600df2fda4fb9ed49bdd46ed8413c13f424719e65439a5",
+      "transactionType": "CALL",
+      "contractName": null,
+      "contractAddress": "0x834bdCbaAe8b03FaBB1EEe03297fC1e5ee3D1bA8",
+      "function": null,
+      "arguments": null,
+      "transaction": {
+        "type": "0x02",
+        "from": "0x59b16d84ec7c88343cd8473b6d57fd66d2596707",
+        "to": "0x834bdcbaae8b03fabb1eee03297fc1e5ee3d1ba8",
+        "gas": "0x1149e",
+        "value": "0x0",
+        "data": "0x2f2ff15dd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e630000000000000000000000000000000000000000000000000000000000000000",
+        "nonce": "0x7",
+        "accessList": []
+      },
+      "additionalContracts": []
+    },
+    {
+      "hash": "0x41d4435089c3afaa0b47ff316991161ee718b1872486a34a37ecafbdea995830",
+      "transactionType": "CALL",
+      "contractName": null,
+      "contractAddress": "0x834bdCbaAe8b03FaBB1EEe03297fC1e5ee3D1bA8",
+      "function": null,
+      "arguments": null,
+      "transaction": {
+        "type": "0x02",
+        "from": "0x59b16d84ec7c88343cd8473b6d57fd66d2596707",
+        "to": "0x834bdcbaae8b03fabb1eee03297fc1e5ee3d1ba8",
+        "gas": "0xa6e9",
+        "value": "0x0",
+        "data": "0xd547741f5f58e3a2316349923ce3780f8d587db2d72378aed66a8261c916544fa6846ca500000000000000000000000000a329c0648769a73afac7f9381e08fb43dbea72",
+        "nonce": "0x8",
+        "accessList": []
+      },
+      "additionalContracts": []
+    }
+  ],
+  "receipts": [],
+  "libraries": [],
+  "pending": [
+    "0x32db24ef642fd1b7c72b270b3fadc49d69818e096e8c02fd7fb7a97976d5d41a",
+    "0xd87a43f3e8655fc795600df2fda4fb9ed49bdd46ed8413c13f424719e65439a5",
+    "0x41d4435089c3afaa0b47ff316991161ee718b1872486a34a37ecafbdea995830"
+  ],
+  "path": "/Users/saxenism/Desktop/gnosis-builders-dao-project/broadcast/4-SetupGovernanceContracts-Chiado.s.sol/10200/run-latest.json",
+  "returns": {},
+  "timestamp": 1665609457,
+  "commit": "042ea3d"
+}
