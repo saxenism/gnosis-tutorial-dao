@@ -76,12 +76,12 @@ pragma solidity ^0.8.13;
 
 import "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 
-contract CollegePresident {
+contract CollegePresident is Ownable {
     string private collegePresident;
 
     event CollegePresidentChanged(string president);
 
-    function makeCollegePresident(string memory president) public {
+    function makeCollegePresident(string memory president) public onlyOwner{
         collegePresident = president;
         emit CollegePresidentChanged(president);
     }
@@ -90,6 +90,7 @@ contract CollegePresident {
         return collegePresident;
     }
 }
+
 
 ```
 
@@ -336,7 +337,7 @@ contract TimeLock is TimelockController {
     uint256 minDelay,
     address[] memory proposers,
     address[] memory executors
-  ) TimelockController(minDelay, proposers, executors, address(0)) {
+  ) TimelockController(minDelay, proposers, executors, msg.sender) {
     
   }
 }
