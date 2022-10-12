@@ -413,6 +413,7 @@ Your exposed private key window would look something like this (This is for demo
 
 ### DeployGovernanceToken
 
+The logic here is to simply deploy the GovernanceTokens contract.
 Inside of the `script` folder create a file named `1-DeployGovernanceToken.s.sol` and make sure it includes the following lines of code:
 
 ```solidity
@@ -491,7 +492,7 @@ contract DeployGovernanceToken is Script {
 Now, to check the correctness of the script, deploy the `GovernanceToken` locally using the following command:
 
 ```shell
-forge script script/DeployGovernanceToken.s.sol --fork-url http://localhost:8545 --broadcast
+forge script script/1-DeployGovernanceToken.s.sol --fork-url http://localhost:8545 --broadcast
 ```
 
 And, once the above script runs successfully, deploy the `GovernanceToken` on the Chiado testnet using the following command:
@@ -502,3 +503,377 @@ forge script script/1-DeployGovernanceToken-Chiado.s.sol:DeployGovernanceToken -
 
 If things go as expected, you should see a screen like this:
 <img width="1728" alt="DeployGovernanceToken-Chiado" src="https://user-images.githubusercontent.com/32522659/195457778-5d5b78bf-6504-4697-b91a-849fe086bbad.png">
+
+## DeployTimeLock
+
+The logic here is also very simple. Deploy the Timelock contract with a minimum delay of 3600 seconds and an empty list of executors and proposors.
+
+Inside of the `script` folder create a file named `2-DeployTimeLock.s.sol` and make sure it includes the following lines of code:
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Script.sol";
+import {TimeLock} from "../src/TimeLock.sol";
+
+contract DeployTimeLock is Script {
+    uint256 public constant MIN_DELAY = 3600; // 1 hour
+    address[] proposers; // We want to keep this array empty for now
+    address[] executors; // We want to keep this array empty for now
+
+    // We basically want only the GovernorContract to be able to propose anything and then anyone can 
+    // execute the proposal (after the MIN_DELAY)
+
+    TimeLock timeLock;
+    
+    function run() public {
+        uint256 deployerPrivateKey = vm.envUint("ANVIL_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            timeLock = new TimeLock(
+                MIN_DELAY,
+                proposers, //List of proposers
+                executors // List of executors
+            );
+        }
+        vm.stopBroadcast();
+    }
+}
+```
+
+Similar to this, create another file called `2-DeployTimeLock-Chiado.s.sol` and make sure it includes the following code:
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Script.sol";
+import {TimeLock} from "../src/TimeLock.sol";
+
+contract DeployTimeLock is Script {
+    uint256 public constant MIN_DELAY = 3600; // 1 hour
+    address[] proposers; // We want to keep this array empty for now
+    address[] executors; // We want to keep this array empty for now
+
+    // We basically want only the GovernorContract to be able to propose anything and then anyone can 
+    // execute the proposal (after the MIN_DELAY)
+
+    TimeLock timeLock;
+    
+    function run() public {
+        uint256 deployerPrivateKey = vm.envUint("CHIADO_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            timeLock = new TimeLock(
+                MIN_DELAY,
+                proposers, //List of proposers
+                executors // List of executors
+            );
+        }
+        vm.stopBroadcast();
+    }
+}
+```
+
+Now, to check the correctness of the script, deploy the `TimeLock` contract locally using the following command:
+
+```shell
+forge script script/2-DeployTimeLock.s.sol --fork-url http://localhost:8545 --broadcast
+```
+
+And, once the above script runs successfully, deploy the `TimeLock` on the Chiado testnet using the following command:
+
+```shell
+forge script script/2-DeployTimeLock-Chiado.s.sol:DeployTimeLock --rpc-url https://rpc.chiadochain.net --broadcast 
+```
+
+If things go as expected, you should see a screen like this:
+<img width="1728" alt="DeployTimeLock-Chiado" src="https://user-images.githubusercontent.com/32522659/195460347-8b2ebd47-38d4-4a31-9c42-0bdefbaffaec.png">
+
+
+### DeployGovernorContract
+
+The logic here is also very simple. Deploy the Governor contract with quorum percentage as 4, voting delay as 1 and voting period as 5. To grab the address of your `GovernanceToken` and `TimeLock` deployments, head over to `broadcast/1-DeployGovernanceToken/run-latest.json`. There you will see a field `contractAddress` in line number 7 that is the required contract address for the `GovernanceToken`.
+
+Similarly you can find the last deployed address of the `TimeLock` contract by heading over to `broadcast/2-DeployTimeLock/run-latest.json`. 
+
+Inside of the `script` folder create a file named `3-DeployGovernorContract.s.sol` and make sure it includes the following lines of code:
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Script.sol";
+import {GovernorContract} from "../src/GovernorContract.sol";
+import {GovernanceToken} from "../src/GovernanceToken.sol";
+import {TimeLock} from "../src/TimeLock.sol";
+
+/**
+export const QUORUM_PERCENTAGE = 4 // Need 4% of voters to pass
+export const MIN_DELAY = 3600 // 1 hour - after a vote passes, you have 1 hour before you can enact
+// export const VOTING_PERIOD = 45818 // 1 week - how long the vote lasts. This is pretty long even for local tests
+export const VOTING_PERIOD = 5 // blocks
+export const VOTING_DELAY = 1 // 1 Block - How many blocks till a proposal vote becomes active
+*/
+
+contract DeployGovernorContract is Script {
+    GovernanceToken governanceToken = GovernanceToken(0xa513E6E4b8f2a923D98304ec87F64353C4D5C853);
+    TimeLock timeLock = TimeLock(payable(0x8A791620dd6260079BF849Dc5567aDC3F2FdC318));
+
+    GovernorContract governorContract;
+
+    function run() public {
+        uint256 deployerPrivateKey = vm.envUint("ANVIL_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            governorContract = new GovernorContract(
+                governanceToken,
+                timeLock,
+                1,
+                5,
+                4
+            );
+        }
+        vm.stopBroadcast();
+    }
+}
+```
+As explained for the local version, for the Chiado version too, if you want to grab the latest deployment address of `GovernanceToken` and/or `TimeLock` you have to head to `broadcast/1-DeployGovernanceToken-Chiado/run-latest.json` (or `broadcast/1-DeployTimeLock-Chiado/run-latest.json`) and grab contract address from line 7. 
+
+You should see a screen like this when grabbing the `GovernanceToken` address:
+<img width="1728" alt="GovernanceTokenAddress-Chiado" src="https://user-images.githubusercontent.com/32522659/195461742-ca6868ac-614f-4897-a996-a288acbad598.png">
+
+While, when you grab the `TimeLock` address, you should get a screen like this:
+<img width="1728" alt="TimeLockAddress-Chiado" src="https://user-images.githubusercontent.com/32522659/195461785-b229980e-546a-4304-af80-23272c1409dc.png">
+
+Similar to this, create another file called `3-DeployGovernorContract-Chiado.s.sol` and make sure it includes the following code:
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Script.sol";
+import {GovernorContract} from "../src/GovernorContract.sol";
+import {GovernanceToken} from "../src/GovernanceToken.sol";
+import {TimeLock} from "../src/TimeLock.sol";
+
+/**
+export const QUORUM_PERCENTAGE = 4 // Need 4% of voters to pass
+export const MIN_DELAY = 3600 // 1 hour - after a vote passes, you have 1 hour before you can enact
+// export const VOTING_PERIOD = 45818 // 1 week - how long the vote lasts. This is pretty long even for local tests
+export const VOTING_PERIOD = 5 // blocks
+export const VOTING_DELAY = 1 // 1 Block - How many blocks till a proposal vote becomes active
+*/
+
+contract DeployGovernorContract is Script {
+    GovernanceToken governanceToken = GovernanceToken(0x3b1223B91049644439e27E3aE1E324f428470533);
+    TimeLock timeLock = TimeLock(payable(0x834bdCbaAe8b03FaBB1EEe03297fC1e5ee3D1bA8));
+
+    GovernorContract governorContract;
+
+    function run() public {
+        uint256 deployerPrivateKey = vm.envUint("CHIADO_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            governorContract = new GovernorContract(
+                governanceToken,
+                timeLock,
+                1,
+                5,
+                4
+            );
+        }
+        vm.stopBroadcast();
+    }
+}
+```
+
+Now, to check the correctness of the script, deploy the `Governor` contract locally using the following command:
+
+```shell
+forge script script/3-DeployGovernorContract.s.sol --fork-url http://localhost:8545 --broadcast
+```
+
+And, once the above script runs successfully, deploy the `Governor` on the Chiado testnet using the following command:
+
+```shell
+forge script script/3-DeployGovernorContract-Chiado.s.sol:DeployGovernorContract --rpc-url https://rpc.chiadochain.net --broadcast
+```
+
+If things go as expected, you should see a screen like this:
+<img width="1728" alt="deployGovernorContract-Chiado" src="https://user-images.githubusercontent.com/32522659/195460285-31c0ea68-b343-4a26-9dea-4541b68822cb.png">
+
+### SetupGovernanceContracts
+
+The logic here is also very simple. We will use this deployment script to revoke the admin access of ourselves (msg.sender) from the `TimeLock`, assign the `executor` role to address(0), so that anyone can execute the proposals and grant the proposer role to the governor contract so that only the governor can create new proposals.
+
+We already know how to grab the addresses for the current deployments of other contracts by heading over to the broacast folder.
+
+Inside of the `script` folder create a file named `4-SetupGovernanceContracts.s.sol` and make sure it includes the following lines of code:
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Script.sol";
+import {GovernorContract} from "../src/GovernorContract.sol";
+import {GovernanceToken} from "../src/GovernanceToken.sol";
+import {TimeLock} from "../src/TimeLock.sol";
+
+/**
+export const QUORUM_PERCENTAGE = 4 // Need 4% of voters to pass
+export const MIN_DELAY = 3600 // 1 hour - after a vote passes, you have 1 hour before you can enact
+// export const VOTING_PERIOD = 45818 // 1 week - how long the vote lasts. This is pretty long even for local tests
+export const VOTING_PERIOD = 5 // blocks
+export const VOTING_DELAY = 1 // 1 Block - How many blocks till a proposal vote becomes active
+*/
+
+contract SetupGovernanceContracts is Script {
+    GovernanceToken governanceToken = GovernanceToken(0xa513E6E4b8f2a923D98304ec87F64353C4D5C853);
+    TimeLock timeLock = TimeLock(payable(0x8A791620dd6260079BF849Dc5567aDC3F2FdC318));
+    GovernorContract governorContract = GovernorContract(payable(0x610178dA211FEF7D417bC0e6FeD39F05609AD788));
+
+    bytes32 proposerAdmin;
+
+    function run() public {
+        uint256 deployerPrivateKey = vm.envUint("ANVIL_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            timeLock.grantRole(keccak256("PROPOSER_ROLE"), address(governorContract));
+            timeLock.grantRole(keccak256("EXECUTOR_ROLE"), address(0));
+            timeLock.revokeRole(keccak256("TIMELOCK_ADMIN_ROLE"), msg.sender);
+        }
+        vm.stopBroadcast();
+    }
+}
+```
+As another example, we already know how to grab the latest deployment addresses of other contracts by navigating to the `broadcast` folder. This is what you'll see when grabbing the `GovernorContract` address:
+<img width="1728" alt="GoverorContractAddress-Chiado" src="https://user-images.githubusercontent.com/32522659/195462287-28bb2d0e-7ec0-4e7b-a872-096ded3b1538.png">
+
+
+Similar to this, create another file called `4-SetupGovernanceContracts-Chiado.s.sol` and make sure it includes the following code:
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Script.sol";
+import {GovernorContract} from "../src/GovernorContract.sol";
+import {GovernanceToken} from "../src/GovernanceToken.sol";
+import {TimeLock} from "../src/TimeLock.sol";
+
+/**
+export const QUORUM_PERCENTAGE = 4 // Need 4% of voters to pass
+export const MIN_DELAY = 3600 // 1 hour - after a vote passes, you have 1 hour before you can enact
+// export const VOTING_PERIOD = 45818 // 1 week - how long the vote lasts. This is pretty long even for local tests
+export const VOTING_PERIOD = 5 // blocks
+export const VOTING_DELAY = 1 // 1 Block - How many blocks till a proposal vote becomes active
+*/
+
+contract SetupGovernanceContracts is Script {
+    GovernanceToken governanceToken = GovernanceToken(0x3b1223B91049644439e27E3aE1E324f428470533);
+    TimeLock timeLock = TimeLock(payable(0x834bdCbaAe8b03FaBB1EEe03297fC1e5ee3D1bA8));
+    GovernorContract governorContract = GovernorContract(payable(0x8bfa2AFAC4eb87E8f84AE8B21171ECeB779d387e));
+
+    function run() public {
+        uint256 deployerPrivateKey = vm.envUint("CHIADO_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            timeLock.grantRole(keccak256("PROPOSER_ROLE"), address(governorContract));
+            timeLock.grantRole(keccak256("EXECUTOR_ROLE"), address(0));
+            timeLock.revokeRole(keccak256("TIMELOCK_ADMIN_ROLE"), msg.sender);
+        }
+        vm.stopBroadcast();
+    }
+}
+```
+
+Now, to check the correctness of the script, make the required changes to the governance contracts locally using the following command:
+
+```shell
+forge script script/4-SetupGovernanceContracts.s.sol --fork-url http://localhost:8545 --broadcast
+```
+
+And, once the above script runs successfully, make the required changes to the governance contracts on Chiado testnet using the following command:
+
+```shell
+forge script script/4-SetupGovernanceContracts-Chiado.s.sol:SetupGovernanceContracts --rpc-url https://rpc.chiadochain.net --broadcast 
+```
+
+If things go as expected, you should see a screen like this:
+<img width="1728" alt="SetupGovernanceContracts-Chiado" src="https://user-images.githubusercontent.com/32522659/195460376-212d6d05-a85b-47bf-af7a-78f3249e0999.png">
+
+
+### DeployCollegePresident
+
+The logic here is also very simple. Deploy the Timelock contract with a minimum delay of 3600 seconds and an empty list of executors and proposors.
+
+Inside of the `script` folder create a file named `5-DeployCollegePresident.s.sol` and make sure it includes the following lines of code:
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Script.sol";
+import {CollegePresident} from "../src/CollegePresident.sol";
+import {TimeLock} from "../src/TimeLock.sol";
+
+contract DeployCollegePresident is Script {
+    CollegePresident collegePresident;
+    TimeLock timeLock = TimeLock(payable(0x8A791620dd6260079BF849Dc5567aDC3F2FdC318));
+
+    function run() public {
+        uint256 deployerPrivateKey = vm.envUint("ANVIL_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            collegePresident = new CollegePresident();
+            // Transfer ownership of CollegePresident contract to Timelock
+            collegePresident.transferOwnership(address(timeLock));
+        }
+        vm.stopBroadcast();
+    }
+}
+```
+
+Similar to this, create another file called `5-DeployCollegePresident-Chiado.s.sol` and make sure it includes the following code:
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Script.sol";
+import {CollegePresident} from "../src/CollegePresident.sol";
+import {TimeLock} from "../src/TimeLock.sol";
+
+contract DeployCollegePresident is Script {
+    CollegePresident collegePresident;
+        TimeLock timeLock = TimeLock(payable(0x834bdCbaAe8b03FaBB1EEe03297fC1e5ee3D1bA8));
+
+    function run() public {
+        uint256 deployerPrivateKey = vm.envUint("CHIADO_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            collegePresident = new CollegePresident();
+            // Transfer ownership of CollegePresident contract to Timelock
+            collegePresident.transferOwnership(address(timeLock));
+        }
+        vm.stopBroadcast();
+    }
+}
+```
+
+Now, to check the correctness of the script, deploy the `CollegePresident` contract locally using the following command:
+
+```shell
+forge script script/5-DeployCollegePresident.s.sol --fork-url http://localhost:8545 --broadcast 
+```
+
+And, once the above script runs successfully, deploy the `CollegePresident` on the Chiado testnet using the following command:
+
+```shell
+forge script script/5-DeployCollegePresident-Chiado.s.sol:DeployCollegePresident --rpc-url https://rpc.chiadochain.net --broadcast
+```
+
+If things go as expected, you should see a screen like this:
+<img width="1728" alt="deployCollegePresident-Chiado" src="https://user-images.githubusercontent.com/32522659/195460240-f60af267-0e6e-4144-9a3d-46836c1c4a76.png">
