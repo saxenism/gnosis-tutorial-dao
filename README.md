@@ -394,8 +394,11 @@ chiado = "${CHIADO_RPC_URL}"
 ```
 3. To grab your `ANVIL_PRIVATE_KEY` open a new tab in your terminal and type in `anvil`. A screen like this should open up:
 <img width="1728" alt="anvil" src="https://user-images.githubusercontent.com/32522659/195455910-913ef397-9db8-426b-8c95-fd93c001acce.png">
+
 4. Grab the first private key and paste it in your .env file as your `ANVIL_PRIVATE_KEY`. Your `ANVIL_PRIVATE_KEY` will be used to deploy the scripts locally.
+
 5. To grab the `CHIADO_PRIVATE_KEY`, you have to get the private keys from your Metamask wallet where Chiado network has already been included. To do that follow these steps:
+
 + Open your Metamask (or whatever wallet you installed) extension and make sure you are on the correct account (one from which you want to deploy the token smart contract).
 + Click on the kebab (three dots) menu
 + Click on Account Details
