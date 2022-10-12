@@ -807,7 +807,7 @@ If things go as expected, you should see a screen like this:
 
 ### DeployCollegePresident
 
-The logic here is also very simple. Deploy the Timelock contract with a minimum delay of 3600 seconds and an empty list of executors and proposors.
+The logic here is also very simple. Deploy the CollegePresident contract and then give up the ownership of the contract to the `TimeLock` contract.
 
 Inside of the `script` folder create a file named `5-DeployCollegePresident.s.sol` and make sure it includes the following lines of code:
 
