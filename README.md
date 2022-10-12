@@ -356,8 +356,6 @@ Compiler run successful
 
 ```
 
-## Writing our deployment scripts
-
 ## Preparing to deploy our token contract
 
 0. Any blockchain is a chain of blocks and the people responsible for creating and adding new blocks to this chain are called miners or stakers. As normal users of blockchain, we provide some fee to these people for their service and to use the computational power of the blockchain which is known as gas fee.
@@ -380,22 +378,24 @@ On the website you will realise that while you can get `1 Chiado xDAI` from the 
 
 Post this, you should be able to see the funds in your metamask wallet. Sweet.
 
-## Deploying our smart contract
+## Writing our deployment scripts
 
-0. Make sure that your Token contract is compiling without any issues by using the following command:
-
+0. Create a .env file in the root of your folder.
+1. Create the following three entries in the `.env` file:
 ```shell
-
-forge build
-
+CHIADO_RPC_URL='https://rpc.chiadochain.net'
+ANVIL_PRIVATE_KEY=
+CHIADO_PRIVATE_KEY=
 ```
-
-If things went as expected, you should see something like this:
-
-<img width="1728" alt="Screenshot 2022-10-05 at 5 40 16 PM" src="https://user-images.githubusercontent.com/32522659/194212564-4f1f90f1-3e11-4997-8704-ee6a40bf8521.png">
-
-1. Now we need to grab our private keys in order to deploy our token smart contract. 
-
+2. Inside of `foundry.toml` include the following entry:
+```
+[rpc_endpoints]
+chiado = "${CHIADO_RPC_URL}"
+```
+3. To grab your `ANVIL_PRIVATE_KEY` open a new tab in your terminal and type in `anvil`. A screen like this should open up:
+<img width="1728" alt="anvil" src="https://user-images.githubusercontent.com/32522659/195455910-913ef397-9db8-426b-8c95-fd93c001acce.png">
+4. Grab the first private key and paste it in your .env file as your `ANVIL_PRIVATE_KEY`. Your `ANVIL_PRIVATE_KEY` will be used to deploy the scripts locally.
+5. To grab the `CHIADO_PRIVATE_KEY`, you have to get the private keys from your Metamask wallet where Chiado network has already been included. To do that follow these steps:
     + Open your Metamask (or whatever wallet you installed) extension and make sure you are on the correct account (one from which you want to deploy the token smart contract).
     + Click on the kebab (three dots) menu
     + Click on Account Details
@@ -407,47 +407,98 @@ Your exposed private key window would look something like this (This is for demo
 
 ![Private Key Metamask](https://0x.games/wp-content/uploads/2021/06/img-2021-06-21-17-30-32.png)
 
-2. A note about private keys: Your private keys are supposed to be private and not meant to be shared with **anyone** under any circumstance. If anyone gets hold of your private keys, they then have unrestricted access to your wallets and all the assets inside it. So, take care and either delete your private keys from your system after this tutorial or simply create a new wallet/account and use that. 
+6. A note about private keys: Your private keys are supposed to be private and not meant to be shared with **anyone** under any circumstance. If anyone gets hold of your private keys, they then have unrestricted access to your wallets and all the assets inside it. So, take care and either delete your private keys from your system after this tutorial or simply create a new wallet/account and use that. 
 
-3. Once you do have your private keys, its time to use them to deploy your token smart contract to either the Chiado testnet or the Gnosis mainnet. The command to deploy that is as follows:
+7. Now is the time to write our deployment scripts:
 
-In our case, the first placeholder <YourContract> would be replaced by `Token` and the second <YourContract> placeholder will be replaced by `TestToken` and the <your_private_key> will be replaced by whatever we grabbed in step 1 of this section.
+### DeployGovernanceToken
 
-+ For Chiado testnet
-```shell
+Inside of the `script` folder create a file named `1-DeployGovernanceToken.s.sol` and make sure it includes the following lines of code:
 
-forge create --rpc-url https://rpc.chiadochain.net --private-key <your_private_key> src/<YourContract>.sol:<YourContract>
+```solidity
+
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Script.sol";
+import {GovernanceToken} from "../src/GovernanceToken.sol";
+
+contract DeployGovernaneToken is Script {
+    GovernanceToken governanceToken;
+
+    function run() public {
+        uint256 deployerPrivateKey = vm.envUint("ANVIL_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            governanceToken = new GovernanceToken();
+        }
+        vm.stopBroadcast();
+
+        console2.log("Governance Token deployed.");
+        console2.log("Governance Token deployed at: ", address(governanceToken));
+
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            governanceToken.delegate(msg.sender);
+            uint256 checkpoint = governanceToken.numCheckpoints(msg.sender);
+            console2.log("Checkpoint: ", checkpoint);
+            assert(checkpoint != 0);
+        }
+        vm.stopBroadcast();
+    }
+}
+
 
 ```
 
-+ For Gnosis mainnet
-```shell
+Similar to this, create another file called `1-DeployGovernanceToken-Chiado.s.sol` and make sure it includes the following code:
 
-forge create --rpc-url https://rpc.gnosischain.com --private-key <your_private_key> src/<YourContract>.sol:<YourContract>
+```solidity
+
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Script.sol";
+import {GovernanceToken} from "../src/GovernanceToken.sol";
+
+contract DeployGovernanceToken is Script {
+    GovernanceToken governanceToken;
+
+    function run() public {
+        uint256 deployerPrivateKey = vm.envUint("CHIADO_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            governanceToken = new GovernanceToken();
+        }
+        vm.stopBroadcast();
+
+        console2.log("Governance Token deployed.");
+        console2.log("Governance Token deployed at: ", address(governanceToken));
+
+        vm.startBroadcast(deployerPrivateKey);
+        {
+            governanceToken.delegate(msg.sender);
+            uint256 checkpoint = governanceToken.numCheckpoints(msg.sender);
+            console2.log("Checkpoint: ", checkpoint);
+            assert(checkpoint != 0);
+        }
+        vm.stopBroadcast();
+    }
+}
 
 ```
 
-If things go as expected, you should see a screen similar to this:
+Now, to check the correctness of the script, deploy the `GovernanceToken` locally using the following command:
 
-<img width="1728" alt="deploy-success" src="https://user-images.githubusercontent.com/32522659/194214389-dfdf4697-04b9-4b6f-89f4-b0f8a33d17e3.png">
+```shell
+forge script script/DeployGovernanceToken.s.sol --fork-url http://localhost:8545 --broadcast
+```
 
-4. Congratulations!! You just deployed your tokens on the Chiado testnet (or the gnosis mainnet) and the address of your tokens (or token contract) is the address written infront of the `deployed to` spec in the earlier image.
+And, once the above script runs successfully, deploy the `GovernanceToken` on the Chiado testnet using the following command:
 
-5. You can also see the deployment done by you (your wallet) on the Gnosis/Chiado block explorer. For this you need to visit the official [Chiado explorer](https://blockscout.chiadochain.net/) or [Gnosis explorer](https://gnosisscan.io/) depending on where you deployed and search for your wallet address. In the page that opens up, you should see a deployment done by you, something like this:
-    
-    <img width="1728" alt="Screenshot 2022-10-05 at 5 13 24 PM" src="https://user-images.githubusercontent.com/32522659/194222864-3c57b1b8-3584-410a-91b6-16c67a16c2bb.png">
-    
-6. Remember the code that we wrote in `Token.sol` ? There we minted 1000 `TTG` tokens to the msg.sender (which is our deploying wallet in this case), so we should be able to see those 1000 tokens in our wallet, right? We need to include our token in our wallets for that to happen. The steps to do that are as follows:
-    + Click on your Metamask wallet extension
-    + Make sure you are on the correct account and correct network
-    + Click on the `Import Tokens` option
-    + In the `Token Contract Address` fill the address where your token contract was deployed to
-    + Other fields should get autofilled (if not, fill the name and decimals which was 18 by default)
-    + Click on `Add Custom Token`
-    + Now you should be able to see your token in your wallet
-    + Congratulations!! Now you can send and recieve your tokens to and from your friends using your Metamask wallet.
-    
-If things went as expected, you should see something like this:
-    
-<img width="1728" alt="Screenshot 2022-10-05 at 5 19 41 PM" src="https://user-images.githubusercontent.com/32522659/194227648-7a96ae5a-2d36-4506-b870-8a4cc28250d3.png">
+```shell
+forge script script/1-DeployGovernanceToken-Chiado.s.sol:DeployGovernanceToken --rpc-url https://rpc.chiadochain.net --broadcast
+```
 
+If things go as expected, you should see a screen like this:
+<img width="1728" alt="DeployGovernanceToken-Chiado" src="https://user-images.githubusercontent.com/32522659/195457778-5d5b78bf-6504-4697-b91a-849fe086bbad.png">
