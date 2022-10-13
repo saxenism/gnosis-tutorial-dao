@@ -73,6 +73,11 @@ contract TestDAOVoting is Test {
         //////////////////////
         assertEq(proposalID, 0);
 
+        // We need to create a few parameters here to call the `propose` function:
+        // 1. targets array: The contract you want to call a function in
+        // 2. values array: The amount of Ether you want to send to those targets
+        // 3. calldatas: Encoded version of the function calls to the target contracts
+        // 4. proposalDescription: A string describing your proposal for others to see and form an opinion before voting
         uint256[] memory values = new uint[](1);
         values[0] = 0;
 
