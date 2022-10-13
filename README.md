@@ -1,5 +1,11 @@
 # DAO Tutorial
 
+## Video Walkthrough:
+
+Find a video walkthrough of this tutorial here:
+
+https://www.loom.com/share/8b84265f0ae247809addec900337f692
+
 ## What is a DAO?
 
 A DAO, or “Decentralized Autonomous Organization,” is a community-led entity with no central authority. It is fully autonomous and transparent: smart contracts lay the foundational rules, execute the agreed upon decisions, and at any point, proposals, voting, and even the very code itself can be publicly audited.
