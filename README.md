@@ -880,3 +880,550 @@ forge script script/5-DeployCollegePresident-Chiado.s.sol:DeployCollegePresident
 
 If things go as expected, you should see a screen like this:
 <img width="1728" alt="deployCollegePresident-Chiado" src="https://user-images.githubusercontent.com/32522659/195460240-f60af267-0e6e-4144-9a3d-46836c1c4a76.png">
+
+## Writing Scripts to interact with our contracts
+
+Since we have already covered how to create and integrate a front end with our smart contracts in the earlier tutorial, let's go ahead and write scripts (or tests) to interact with our contracts and see if they indeed do behave as intended or not.
+
+The idea is to write three different test scripts to check whether the `proposing`, `voting` and `execution` functionality works as intended or not.
+
+The `setup` function can be thought of like a cache where whatever you do inside of the `setup` function becomes available to the tests written after it. So, to make our lives easier, we will include:
++ contract deployments and initializations in the proposal setup
++ proposal setup in the voting setup
++ voting setup in the execution setup
+
+### test-dao-proposal
+
+0. Delete all files under the `test` directory and create a new file there called `test-dao-proposal.t.sol`
+1. The `.t.sol` extension is used to tell `forge` that this is a test file and should be treated as such.
+2. Copy and paste the following code in that file:
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Test.sol";
+import {IGovernor} from "../lib/openzeppelin-contracts/contracts/governance/IGovernor.sol";
+import {GovernanceToken} from "../src/GovernanceToken.sol";
+import {TimeLock} from "../src/TimeLock.sol";
+import {GovernorContract} from "../src/GovernorContract.sol";
+import {CollegePresident} from "../src/CollegePresident.sol";
+
+contract TestDAOProposal is Test {
+    uint256 public constant MIN_DELAY = 3600; // 1 hour
+    address[] public proposors;
+    address[] public executors;
+
+    uint256 public constant VOTING_DELAY = 1; // 1 block till the proposal becomes active
+    uint256 public constant VOTING_PERIOD = 5; // 5 blocks is the voting duration
+    uint256 public constant QUORUM_PERCENTAGE = 4;
+
+    GovernanceToken governanceToken;
+    TimeLock timeLock;
+    GovernorContract governorContract;
+    CollegePresident collegePresident;
+
+    function setUp() public {
+        // Deploying the governanceToken
+        governanceToken = new GovernanceToken();
+        // Delegating the voting rights to ourselves
+        governanceToken.delegate(msg.sender);
+        assertTrue(governanceToken.numCheckpoints(msg.sender) != 0);
+
+        // Deploying Timelock with a min_delay of 3600 and an empty list of proposors and executors.
+        timeLock = new TimeLock(
+            MIN_DELAY, 
+            proposors, 
+            executors
+        );
+
+        // Deploying GovernorContract with very low values of voting delays and voting periods for the sake of testing
+        governorContract = new GovernorContract(
+            governanceToken,
+            timeLock,
+            VOTING_DELAY,
+            VOTING_PERIOD,
+            QUORUM_PERCENTAGE
+        );
+
+        // Making the proposor -> GovernorContract
+        timeLock.grantRole(keccak256("PROPOSER_ROLE"), address(governorContract));
+
+        // Making the executor -> address(0) -> everyone
+        timeLock.grantRole(keccak256("EXECUTOR_ROLE"), address(0));
+
+        // Revoking admin access of Timelock admin
+        timeLock.revokeRole(keccak256("TIMELOCK_ADMIN_ROLE"), msg.sender);
+
+        //Let's deploy the collegePresident contract (the contract that we want to be governed)
+        collegePresident = new CollegePresident();
+
+        // Let's now transfer the ownership of the collegePresident to the timeLock contract
+        collegePresident.transferOwnership(address(timeLock));
+    }
+
+    function test_tokenDeployment() public {
+        assertTrue(address(governanceToken)!= address(0));
+        assertTrue(address(timeLock) != address(0));
+        assertTrue(address(governorContract) != address(0));
+        assertTrue(address(collegePresident) != address(0));
+
+        emit log_named_address("GovernanceToken", address(governanceToken));
+        emit log_named_address("TimeLock", address(timeLock));
+        emit log_named_address("Governor Contract", address(governorContract));
+        emit log_named_address("College President", address(collegePresident));
+    }
+
+    function test_proposal() public {
+        uint proposalID;
+        assertEq(proposalID, 0);
+
+        uint256[] memory values = new uint[](1);
+        values[0] = 0;
+
+        address[] memory targets = new address[](1);
+        targets[0] = address(collegePresident);
+
+        bytes memory makeCollegePresidentCall = abi.encodeWithSelector(collegePresident.makeCollegePresident.selector, "Yami Sukehiro");
+        bytes[] memory calldatas = new bytes[](1); 
+        calldatas[0] = makeCollegePresidentCall;
+
+        string memory proposalDescription = "Yami Sukehiro always pushes beyond his current limit and inspires his team to do the same. Therefore, he should be the college president";
+        
+        // Since only the governorContract can propose. The governorContract will propose a new College President name
+        proposalID = governorContract.propose(
+                        targets,
+                        values,
+                        calldatas,
+                        proposalDescription
+                     );
+
+        // If the governorContract.propose function executed as intended, we should have got a new value of proposalID
+        assertTrue(proposalID != 0);
+        
+        // Since the proposal has just been created and not passed the VOTING_DELAY, the proposal should be in Pending state.
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Pending);
+
+        // Moving ahead 1 block which is the VOTING_DELAY that we had set
+        vm.warp(block.timestamp + VOTING_DELAY);
+        vm.roll(block.timestamp + VOTING_DELAY);
+
+        // Since the proposal had been created previously and now we have moved ahead by VOTING_DELAY block(s), the proposal should be in ACTIVE state
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Active);
+    }
+}
+```
+
+3. Save the script and run `forge build --force` to see if everything is working as intended. If everything goes alright, you should see a screen like this:
+<img width="926" alt="Screenshot 2022-10-13 at 5 44 42 PM" src="https://user-images.githubusercontent.com/32522659/195593358-b68cb67d-0cd9-4fbb-8dcf-810ffd1adf4c.png">
+
+4. Now, to test the script run this command:
+```shell
+forge test --match-path test/test-dao-proposal.t.sol -vv
+```
+
+If things go as intended, you should see a screen like this:
+
+<img width="1296" alt="Screenshot 2022-10-13 at 5 46 07 PM" src="https://user-images.githubusercontent.com/32522659/195593587-051f4e4f-d238-43de-838b-5c2335394ff2.png">
+
+5. Whatever is happening in this test, is pretty straightforward and explained in the code comments.
+
+### test-dao-voting
+
+0. Create another file `test/test-dao-voting.t.sol`.
+1. The `.t.sol` extension is used to tell `forge` that this is a test file and should be treated as such.
+2. Copy and paste the following code in that file:
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Test.sol";
+import {IGovernor} from "../lib/openzeppelin-contracts/contracts/governance/IGovernor.sol";
+import {GovernanceToken} from "../src/GovernanceToken.sol";
+import {TimeLock} from "../src/TimeLock.sol";
+import {GovernorContract} from "../src/GovernorContract.sol";
+import {CollegePresident} from "../src/CollegePresident.sol";
+
+contract TestDAOVoting is Test {
+    uint256 public constant MIN_DELAY = 3600; // 1 hour
+    address[] public proposors;
+    address[] public executors;
+
+    uint256 public constant VOTING_DELAY = 1; // 1 block till the proposal becomes active
+    uint256 public constant VOTING_PERIOD = 5; // 5 blocks is the voting duration
+    uint256 public constant QUORUM_PERCENTAGE = 4;
+
+    GovernanceToken governanceToken;
+    TimeLock timeLock;
+    GovernorContract governorContract;
+    CollegePresident collegePresident;
+
+    uint proposalID;
+
+    function setUp() public {
+        /////////////////////////////////////////////
+        // Setting Up The Contracts
+        /////////////////////////////////////////////
+
+        // Deploying the governanceToken
+        governanceToken = new GovernanceToken();
+
+        // Delegating the voting rights to ourselves
+        governanceToken.delegate(address(this));
+        assertTrue(governanceToken.numCheckpoints(address(this)) != 0);
+
+        // Deploying Timelock with a min_delay of 3600 and an empty list of proposors and executors.
+        timeLock = new TimeLock(
+            MIN_DELAY, 
+            proposors, 
+            executors
+        );
+
+        // Deploying GovernorContract with very low values of voting delays and voting periods for the sake of testing
+        governorContract = new GovernorContract(
+            governanceToken,
+            timeLock,
+            VOTING_DELAY,
+            VOTING_PERIOD,
+            QUORUM_PERCENTAGE
+        );
+
+        // Making the proposor -> GovernorContract
+        timeLock.grantRole(keccak256("PROPOSER_ROLE"), address(governorContract));
+
+        // Making the executor -> address(0) -> everyone
+        timeLock.grantRole(keccak256("EXECUTOR_ROLE"), address(0));
+
+        // Revoking admin access of Timelock admin
+        timeLock.revokeRole(keccak256("TIMELOCK_ADMIN_ROLE"), msg.sender);
+
+        //Let's deploy the collegePresident contract (the contract that we want to be governed)
+        collegePresident = new CollegePresident();
+
+        // Let's now transfer the ownership of the collegePresident to the timeLock contract
+        collegePresident.transferOwnership(address(timeLock));
+
+        //////////////////////
+        // DAO Proposal Step
+        //////////////////////
+        assertEq(proposalID, 0);
+
+        uint256[] memory values = new uint[](1);
+        values[0] = 0;
+
+        address[] memory targets = new address[](1);
+        targets[0] = address(collegePresident);
+
+        bytes memory makeCollegePresidentCall = abi.encodeWithSelector(collegePresident.makeCollegePresident.selector, "Yami Sukehiro");
+        bytes[] memory calldatas = new bytes[](1); 
+        calldatas[0] = makeCollegePresidentCall;
+
+        string memory proposalDescription = "Yami Sukehiro always pushes beyond his current limit and inspires his team to do the same. Therefore, he should be the college president";
+        
+        // Since only the governorContract can propose. The governorContract will propose a new College President name
+        proposalID = governorContract.propose(
+                        targets,
+                        values,
+                        calldatas,
+                        proposalDescription
+                     );
+
+        // If the governorContract.propose function executed as intended, we should have got a new value of proposalID
+        assertTrue(proposalID != 0);
+        
+        // Since the proposal has just been created and not passed the VOTING_DELAY, the proposal should be in Pending state.
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Pending);
+
+        // Moving ahead 1 block which is the VOTING_DELAY that we had set
+        vm.warp(block.timestamp + VOTING_DELAY);
+        vm.roll(block.timestamp + VOTING_DELAY);
+
+        // Since the proposal had been created previously and now we have moved ahead by VOTING_DELAY block(s), the proposal should be in ACTIVE state
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Active);
+    }
+
+    function test_voting() public {
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Active);
+
+        // Let's now vote
+        // Remember we (address(this), which is this particular contract in this case) can vote since we have all the GovernanceTokens and we have delegated the voting power to ourselves
+        uint256 governanceTokenBalance = governanceToken.balanceOf(address(this));
+        uint256 eligibleVotes = governanceToken.getVotes(address(this));
+
+        emit log_named_uint("msg.sender voting power", eligibleVotes);
+        emit log_named_uint("msg.sender token balance", governanceTokenBalance);
+
+        assertEq(governanceTokenBalance, eligibleVotes);
+
+        // Let's assume that we will use the following standards for voting:
+        // 0 : Against 
+        // 1 : For  
+        // 2 : Abstain
+
+        uint8 support = 1; // We are voting For
+        string memory reason = "I like the Black Bulls";
+
+        governorContract.castVoteWithReason(
+            proposalID, 
+            support, 
+            reason
+        );
+
+        // Let's check the proposal state now that it has been voted yes by us.
+        // Since the VOTING_PERIOD is still going on, the state should still be ACTIVE
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Active);
+
+        // After the VOTING_PERIOD has passed, the proposal should succeed
+        vm.warp(block.timestamp + VOTING_PERIOD + 1);
+        vm.roll(block.timestamp + VOTING_PERIOD + 1);
+
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Succeeded);
+    }
+}
+```
+3. Save the script and run `forge build --force` to see if everything is working as intended. If everything goes alright, you should see a screen like this:
+<img width="926" alt="Screenshot 2022-10-13 at 5 44 42 PM" src="https://user-images.githubusercontent.com/32522659/195593358-b68cb67d-0cd9-4fbb-8dcf-810ffd1adf4c.png">
+
+4. Now, to test the script run this command:
+```shell
+forge test --match-path test/test-dao-voting.t.sol -vv
+```
+
+If things go as intended, you should see a screen like this:
+
+<img width="1251" alt="Screenshot 2022-10-13 at 5 54 26 PM" src="https://user-images.githubusercontent.com/32522659/195595274-ba9611e1-8d55-4cbd-bb82-f3fc91de5abb.png">
+
+5. Whatever is happening in this test, is pretty straightforward and explained in the code comments.
+
+### test-dao-queue-and-execute
+
+0. Create another file `test/test-dao-queue-and-execute.t.sol`.
+1. The `.t.sol` extension is used to tell `forge` that this is a test file and should be treated as such.
+2. Copy and paste the following code in that file:
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+
+pragma solidity ^0.8.13;
+
+import "../lib/forge-std/src/Test.sol";
+import {IGovernor} from "../lib/openzeppelin-contracts/contracts/governance/IGovernor.sol";
+import {GovernanceToken} from "../src/GovernanceToken.sol";
+import {TimeLock} from "../src/TimeLock.sol";
+import {GovernorContract} from "../src/GovernorContract.sol";
+import {CollegePresident} from "../src/CollegePresident.sol";
+
+contract TestDAOVoting is Test {
+    uint256 public constant MIN_DELAY = 3600; // 1 hour
+    address[] public proposors;
+    address[] public executors;
+
+    uint256 public constant VOTING_DELAY = 1; // 1 block till the proposal becomes active
+    uint256 public constant VOTING_PERIOD = 5; // 5 blocks is the voting duration
+    uint256 public constant QUORUM_PERCENTAGE = 4;
+
+    GovernanceToken governanceToken;
+    TimeLock timeLock;
+    GovernorContract governorContract;
+    CollegePresident collegePresident;
+
+    uint proposalID;
+
+    function setUp() public {
+        /////////////////////////////////////////////
+        // Setting Up The Contracts
+        /////////////////////////////////////////////
+
+        // Deploying the governanceToken
+        governanceToken = new GovernanceToken();
+
+        // Delegating the voting rights to ourselves
+        governanceToken.delegate(address(this));
+        assertTrue(governanceToken.numCheckpoints(address(this)) != 0);
+
+        // Deploying Timelock with a min_delay of 3600 and an empty list of proposors and executors.
+        timeLock = new TimeLock(
+            MIN_DELAY, 
+            proposors, 
+            executors
+        );
+
+        // Deploying GovernorContract with very low values of voting delays and voting periods for the sake of testing
+        governorContract = new GovernorContract(
+            governanceToken,
+            timeLock,
+            VOTING_DELAY,
+            VOTING_PERIOD,
+            QUORUM_PERCENTAGE
+        );
+
+        // Making the proposor -> GovernorContract
+        timeLock.grantRole(keccak256("PROPOSER_ROLE"), address(governorContract));
+
+        // Making the executor -> address(0) -> everyone
+        timeLock.grantRole(keccak256("EXECUTOR_ROLE"), address(0));
+
+        // Revoking admin access of Timelock admin
+        timeLock.revokeRole(keccak256("TIMELOCK_ADMIN_ROLE"), msg.sender);
+
+        //Let's deploy the collegePresident contract (the contract that we want to be governed)
+        collegePresident = new CollegePresident();
+
+        // Let's now transfer the ownership of the collegePresident to the timeLock contract
+        collegePresident.transferOwnership(address(timeLock));
+
+        //////////////////////
+        // DAO Proposal Step
+        //////////////////////
+        assertEq(proposalID, 0);
+
+        uint256[] memory values = new uint[](1);
+        values[0] = 0;
+
+        address[] memory targets = new address[](1);
+        targets[0] = address(collegePresident);
+
+        bytes memory makeCollegePresidentCall = abi.encodeWithSelector(collegePresident.makeCollegePresident.selector, "Yami Sukehiro");
+        bytes[] memory calldatas = new bytes[](1); 
+        calldatas[0] = makeCollegePresidentCall;
+
+        string memory proposalDescription = "Yami Sukehiro always pushes beyond his current limit and inspires his team to do the same. Therefore, he should be the college president";
+        
+        // Since only the governorContract can propose. The governorContract will propose a new College President name
+        proposalID = governorContract.propose(
+                        targets,
+                        values,
+                        calldatas,
+                        proposalDescription
+                     );
+
+        // If the governorContract.propose function executed as intended, we should have got a new value of proposalID
+        assertTrue(proposalID != 0);
+        
+        // Since the proposal has just been created and not passed the VOTING_DELAY, the proposal should be in Pending state.
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Pending);
+
+        // Moving ahead 1 block which is the VOTING_DELAY that we had set
+        vm.warp(block.timestamp + VOTING_DELAY);
+        vm.roll(block.timestamp + VOTING_DELAY);
+
+        // Since the proposal had been created previously and now we have moved ahead by VOTING_DELAY block(s), the proposal should be in ACTIVE state
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Active);
+
+        //////////////////////////
+        // DAO Voting Step
+        //////////////////////////
+        
+        // Let's now vote
+        // Remember we (address(this), which is this particular contract in this case) can vote since we have all the GovernanceTokens and we have delegated the voting power to ourselves
+        uint256 governanceTokenBalance = governanceToken.balanceOf(address(this));
+        uint256 eligibleVotes = governanceToken.getVotes(address(this));
+
+        emit log_named_uint("msg.sender voting power", eligibleVotes);
+        emit log_named_uint("msg.sender token balance", governanceTokenBalance);
+
+        assertEq(governanceTokenBalance, eligibleVotes);
+
+        // Let's assume that we will use the following standards for voting:
+        // 0 : Against 
+        // 1 : For  
+        // 2 : Abstain
+
+        uint8 support = 1; // We are voting For
+        string memory reason = "I like the Black Bulls";
+
+        governorContract.castVoteWithReason(
+            proposalID, 
+            support, 
+            reason
+        );
+
+        // Let's check the proposal state now that it has been voted yes by us.
+        // Since the VOTING_PERIOD is still going on, the state should still be ACTIVE
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Active);
+
+        // After the VOTING_PERIOD has passed, the proposal should succeed
+        vm.warp(block.timestamp + VOTING_PERIOD + 1);
+        vm.roll(block.timestamp + VOTING_PERIOD + 1);
+
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Succeeded);
+    }
+
+    function test_queueAndExecute() public {
+        //  Now that the proposal has succeded, we need to queue it for the MIN_DELAY and then execute the proposal
+        uint256[] memory values = new uint[](1);
+        values[0] = 0;
+
+        address[] memory targets = new address[](1);
+        targets[0] = address(collegePresident);
+
+        bytes memory makeCollegePresidentCall = abi.encodeWithSelector(collegePresident.makeCollegePresident.selector, "Yami Sukehiro");
+        bytes[] memory calldatas = new bytes[](1); 
+        calldatas[0] = makeCollegePresidentCall;
+        
+        uint256 proposalIDFromQueuing = governorContract.queue(
+                                            targets, 
+                                            values, 
+                                            calldatas, 
+                                            keccak256(
+                                                "Yami Sukehiro always pushes beyond his current limit and inspires his team to do the same. Therefore, he should be the college president"
+                                            )
+                                        );
+
+        assertEq(proposalID, proposalIDFromQueuing);
+
+        // Since we queued the proposal, the state of the proposal should be Queued
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Queued);
+
+        // Let's go past the MIN_DELAY (3600 seconds ~= 360 blocks) assuming 1 blocks takes 10 seconds to be minted
+        vm.warp(block.timestamp + (MIN_DELAY));
+        vm.roll(block.timestamp + (MIN_DELAY));
+
+        // Since we are past the MIN_DELAY, we can execute the proposal
+        governorContract.execute(
+            targets, 
+            values, 
+            calldatas, 
+            keccak256(
+                "Yami Sukehiro always pushes beyond his current limit and inspires his team to do the same. Therefore, he should be the college president"
+            )
+        );        
+
+        // Now that the proposal has been executed, the state of the proposal should be EXECUTED
+        assertTrue(governorContract.state(proposalID) == IGovernor.ProposalState.Executed);
+
+        // Now since the proposal has been executed, our college president should have been updated. Let's check that
+        string memory newPresident = collegePresident.getCollegePresident();
+        emit log_named_string("New College President", newPresident);
+
+        assertEq(newPresident, "Yami Sukehiro", "Proposal was not executed properly");
+
+        emit log_string("CONGRTULATIONS!! YOU DID IT!! YOU CREATED A DAO, CREATED A PROPOSAL, VOTED AND EXECUTED IT TO ELECT A NEW PRESIDENT");
+    }
+}
+```
+
+3. Save the script and run `forge build --force` to see if everything is working as intended. If everything goes alright, you should see a screen like this:
+<img width="926" alt="Screenshot 2022-10-13 at 5 44 42 PM" src="https://user-images.githubusercontent.com/32522659/195593358-b68cb67d-0cd9-4fbb-8dcf-810ffd1adf4c.png">
+
+4. Now, to test the script run this command:
+```shell
+forge test --match-path test/test-dao-queue-and-execute.t.sol -vv
+```
+
+If things go as intended, you should see a screen like this:
+
+<img width="1382" alt="Screenshot 2022-10-13 at 5 56 51 PM" src="https://user-images.githubusercontent.com/32522659/195595746-40989ea4-6176-45c7-8992-d9c7720e05b2.png">
+
+5. Whatever is happening in this test, is pretty straightforward and explained in the code comments.
+
+## Congratulations
+
+You just created a DAO, created governance tokens that can be used to vote, created a proposal, voted on the proposal, queued the proposal and then finally executed the proposal to make a new college president. Well Done!!
+
+### Next Steps:
+1. In this tutorial, you were the only DAO member (since you had all the governance tokens). Try and do this exact process but with multiple people holding your governance token.
+2. Remember, we also deployed our contracts on chain? You can use the previous tutorial to learn how to hook a front-end to a smart contract and with that you can create a front-end for your smart contract.
+3. Instead of votable ERC20, which we used in this tutorial, try implementing this logic with votable ERC721 NFTs.
+4. Or just about anything else. Let your imagination, run wild :D
